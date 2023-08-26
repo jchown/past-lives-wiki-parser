@@ -9,7 +9,7 @@ object Main {
 
     var key: String = ""
     var path: String = ""
-    val logging = true
+    val logging = false
     var tab = ""
     val tabSize = 2
 
@@ -17,6 +17,7 @@ object Main {
     fun main(args: Array<String>) {
 
         val file = File("C:\\Users\\jason\\Downloads\\wikidata-20220103-all.json.gz")
+
         FileInputStream(file).use { inStream ->
 
             GZIPInputStream(inStream).use { gzStream ->
@@ -26,33 +27,45 @@ object Main {
 
                 take(jParser, JsonToken.START_ARRAY)
 
+                var i = 1
                 while (true) {
 
-                    val item = readItem(jParser)
+                    val item = readItem(jParser) ?: continue
+
+                    val name = item.englishName()
+
+                    if (item.hasLifeDates()) {
+
+                        println("${i++}: $name - ${item.englishDescription()}")
+                    }
                 }
            }
         }
     }
 
-    private fun readItem(jParser: JsonParser): Item {
+    private fun readItem(jParser: JsonParser): Item? {
         take(jParser, JsonToken.START_OBJECT)
 
         var id = "?"
         var name = mapOf<String, String>()
+        var description = mapOf<String, String>()
+        var claims = mapOf<String, String>()
 
         do {
-            val token = nextToken(jParser)
-            when (token) {
+            when (val token = nextToken(jParser)) {
                 JsonToken.END_OBJECT -> {
-                    return Item(id, name)
+                    return Item(id, name, description, claims)
                 }
                 JsonToken.FIELD_NAME -> {
-                    when (jParser.valueAsString) {
+                    when (val key = jParser.valueAsString) {
 
                         "type" -> {
                             val typeValue = nextValueAsString(jParser)
-                            if (typeValue != "item")
-                                throw Exception("Expected 'item' but was '$typeValue'")
+                            if (typeValue != "item") {
+                                println("Expected 'item' but was '$typeValue'")
+                                skipUntil(jParser, JsonToken.END_OBJECT)
+                                return null
+                            }
                         }
 
                         "id" -> {
@@ -64,10 +77,16 @@ object Main {
                         }
 
                         "descriptions" -> {
-                            name = nextValueAsLanguageStrings(jParser)
+                            description = nextValueAsLanguageStrings(jParser)
+                        }
+
+                        "claims" -> {
+                            claims = nextValueAsClaims(jParser)
                         }
 
                         else -> {
+                            logln("Skipping $key")
+
                             skipValue(jParser)
                         }
                     }
@@ -150,6 +169,78 @@ object Main {
         }
 
         return strings
+    }
+
+
+    private fun nextValueAsClaims(jParser: JsonParser): Map<String, String> {
+        val claims = mutableMapOf<String,String>()
+
+        expectNextToken(jParser, JsonToken.START_OBJECT)
+
+        while (true) {
+            val next = nextToken(jParser)
+            if (next == JsonToken.END_OBJECT)
+                break
+
+            if (next != JsonToken.FIELD_NAME)
+                throw Exception("Expected field")
+
+            val key = jParser.valueAsString
+            expectNextToken(jParser, JsonToken.START_ARRAY)
+            expectNextToken(jParser, JsonToken.START_OBJECT)
+
+            expectNextToken(jParser, JsonToken.FIELD_NAME)
+            if (jParser.valueAsString == "id") {
+                skipValue(jParser)
+                expectNextToken(jParser, JsonToken.FIELD_NAME)
+            }
+
+            if (jParser.valueAsString != "mainsnak")
+                throw Exception("Expected 'mainsnak' but was '${jParser.valueAsString}'")
+
+            claims[key] = nextValueAsSnak(jParser)
+
+            skipUntil(jParser, JsonToken.END_OBJECT)
+            skipUntil(jParser, JsonToken.END_ARRAY)
+        }
+
+        val dob = claims["P569"]
+
+        return claims
+    }
+
+    private fun nextValueAsSnak(jParser: JsonParser): String {
+        val snak = mutableMapOf<String,String>()
+
+        expectNextToken(jParser, JsonToken.START_OBJECT)
+
+        while (true) {
+            val next = nextToken(jParser)
+            if (next == JsonToken.END_OBJECT)
+                break
+
+            if (next != JsonToken.FIELD_NAME)
+                throw Exception("Expected field")
+
+            val key = jParser.valueAsString
+            val value = when (nextToken(jParser)) {
+                JsonToken.START_OBJECT -> {
+                    skipUntil(jParser, JsonToken.END_OBJECT)
+                    "{}"
+                }
+                JsonToken.START_ARRAY -> {
+                    skipUntil(jParser, JsonToken.END_ARRAY)
+                    "[]"
+                }
+                else -> {
+                    jParser.valueAsString
+                }
+            }
+
+            snak[key] = value
+        }
+
+        return snak["datatype"]!!
     }
 
     private fun expectNextToken(jParser: JsonParser, expectedToken: JsonToken) {
