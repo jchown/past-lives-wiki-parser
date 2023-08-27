@@ -1,14 +1,18 @@
 import com.fasterxml.jackson.core.JsonFactory
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.core.JsonToken
+import com.fasterxml.jackson.databind.ObjectMapper
 import java.io.File
 import java.io.FileInputStream
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.zip.GZIPInputStream
 
 object Main {
 
     var key: String = ""
     var path: String = ""
+
     val logging = false
     var tab = ""
     val tabSize = 2
@@ -27,6 +31,8 @@ object Main {
 
                 take(jParser, JsonToken.START_ARRAY)
 
+                val itemsByDeathDate = mutableMapOf<Int, MutableList<DeadPerson>>()
+
                 var i = 1
                 while (true) {
 
@@ -34,13 +40,42 @@ object Main {
 
                     val name = item.englishName()
 
-                    if (item.hasLifeDates()) {
+                    if (item.isFictionalHuman()) {
 
-                        println("${i++}: $name - ${item.englishDescription()}")
+                        //println("$name is fictional")
+                        continue
+                    }
+
+                    if (!item.isHuman()) {
+
+                        //println("$name is not a human")
+                        continue
+                    }
+
+                    if (!item.hasLifeDates()) {
+
+                        //println("$name doesn't have a known life span")
+                        continue
+                    }
+
+                    println("${i++}: $name - ${item.englishDescription()}")
+
+                    val deathDate = item.deathDate()
+                    val items = itemsByDeathDate.computeIfAbsent(deathDate) { mutableListOf() }
+                    items.add(item.toDeadPerson())
+
+                    if ((i % 1000) == 0) {
+                        save(itemsByDeathDate)
                     }
                 }
            }
         }
+    }
+
+    val objectMapper = ObjectMapper().writerWithDefaultPrettyPrinter()
+
+    private fun save(items: Map<Int, List<DeadPerson>>) {
+        objectMapper.writeValue(File("items.json"), items)
     }
 
     private fun readItem(jParser: JsonParser): Item? {
@@ -189,6 +224,10 @@ object Main {
             expectNextToken(jParser, JsonToken.START_ARRAY)
             expectNextToken(jParser, JsonToken.START_OBJECT)
 
+            //println("claim: $key")
+            //if (key == Item.INSTANCE_OF)
+            //    println()
+
             expectNextToken(jParser, JsonToken.FIELD_NAME)
             if (jParser.valueAsString == "id") {
                 skipValue(jParser)
@@ -198,21 +237,95 @@ object Main {
             if (jParser.valueAsString != "mainsnak")
                 throw Exception("Expected 'mainsnak' but was '${jParser.valueAsString}'")
 
-            claims[key] = nextValueAsSnak(jParser)
+            val snak = nextValueAsSnak(jParser)
+            if (snak != null)
+                claims[key] = snak
 
             skipUntil(jParser, JsonToken.END_OBJECT)
             skipUntil(jParser, JsonToken.END_ARRAY)
         }
 
-        val dob = claims["P569"]
-
         return claims
     }
 
-    private fun nextValueAsSnak(jParser: JsonParser): String {
-        val snak = mutableMapOf<String,String>()
+    private fun nextValueAsSnak(jParser: JsonParser): String? {
 
         expectNextToken(jParser, JsonToken.START_OBJECT)
+        val obj = readObject(jParser)
+        val snaktype = obj["snaktype"]
+        when (snaktype) {
+            "novalue" -> {
+                return "(no value)"
+            }
+            "somevalue" -> {
+                return Item.UNKNOWN
+            }
+            "value" -> {
+                val datavalue = obj["datavalue"] as Map<String, Any>
+                when (datavalue["type"]) {
+                    "time" -> {
+                        return asTime(obj)
+                    }
+
+                    "wikibase-entityid" -> {
+                        return asId(obj)
+                    }
+
+                    else -> {
+                        return "{}"
+                    }
+                }
+            }
+            else -> {
+                throw Exception();
+            }
+        }
+    }
+
+    val PROLEPTIC_GREGORIAN = "http://www.wikidata.org/entity/Q1985727"
+    val PROLEPTIC_JULIAN = "http://www.wikidata.org/entity/Q1985786"
+
+    val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd G")
+
+    private fun asTime(obj: Map<String, Any>): String? {
+        val datavalue: Map<String, Any> = obj["datavalue"] as Map<String, Any>
+        val value: Map<String, Any> = datavalue["value"] as Map<String, Any>
+
+        val precision = value["precision"] as String
+        if (precision != "11")
+            return null
+
+
+        //val timezone = value["timezone"] as String
+        //if (timezone != "0")
+        //    throw Exception("timezone not 0")
+
+        val calendar = value["calendarmodel"] as String
+        val daysOffset = when (calendar) {
+            PROLEPTIC_GREGORIAN -> 0
+            PROLEPTIC_JULIAN -> 13
+            else -> throw Exception("Calendar is $calendar not Gregorian ($PROLEPTIC_GREGORIAN)")
+        }
+
+        val time = value["time"] as String
+        val eraAD = (time[0] == '+')
+        val ymd = time.substring(1, 11)
+
+        val suffix = if (eraAD) "AD" else "BC"
+        val datetime = LocalDate.parse("$ymd $suffix", dateFormat).plusDays(daysOffset.toLong())
+
+        return datetime.toEpochDay().toString()
+    }
+
+    private fun asId(obj: Map<String, Any>): String {
+        val datavalue: Map<String, Any> = obj["datavalue"] as Map<String, Any>
+        val value: Map<String, Any> = datavalue["value"] as Map<String, Any>
+
+        return value["id"] as String
+    }
+
+    private fun readObject(jParser: JsonParser): Map<String, Any> {
+        val obj = mutableMapOf<String,Any>()
 
         while (true) {
             val next = nextToken(jParser)
@@ -223,24 +336,46 @@ object Main {
                 throw Exception("Expected field")
 
             val key = jParser.valueAsString
-            val value = when (nextToken(jParser)) {
+            val value: Any = when (nextToken(jParser)) {
                 JsonToken.START_OBJECT -> {
-                    skipUntil(jParser, JsonToken.END_OBJECT)
-                    "{}"
+                    readObject(jParser)
                 }
                 JsonToken.START_ARRAY -> {
-                    skipUntil(jParser, JsonToken.END_ARRAY)
-                    "[]"
+                    readArray(jParser)
+                }
+                else -> {
+                    jParser.valueAsString ?: "null"
+                }
+            }
+
+            obj[key] = value
+        }
+
+        return obj
+    }
+
+    private fun readArray(jParser: JsonParser): Array<Any> {
+        val arr = mutableListOf<Any>()
+
+        while (true) {
+            val next = nextToken(jParser)
+            if (next == JsonToken.END_ARRAY)
+                break
+
+            arr.add(when (nextToken(jParser)) {
+                JsonToken.START_OBJECT -> {
+                    readObject(jParser)
+                }
+                JsonToken.START_ARRAY -> {
+                    readArray(jParser)
                 }
                 else -> {
                     jParser.valueAsString
                 }
-            }
-
-            snak[key] = value
+            })
         }
 
-        return snak["datatype"]!!
+        return arr.toTypedArray()
     }
 
     private fun expectNextToken(jParser: JsonParser, expectedToken: JsonToken) {

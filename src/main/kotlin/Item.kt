@@ -4,8 +4,16 @@ class Item(
     val description: Map<String, String>,
     val claims: Map<String, String>
 ) {
-    private val DOB_PROPERTY = "P569"
-    private val DOD_PROPERTY = "P570"
+
+    companion object {
+        val HUMAN = "Q5"
+        val FICTIONAL_HUMAN = "Q15632617"
+        val INSTANCE_OF = "P31"
+        val DATE_OF_BIRTH = "P569"
+        val DATE_OF_DEATH = "P570"
+
+        val UNKNOWN = "???"
+    }
 
     fun englishName(): String {
 
@@ -29,7 +37,38 @@ class Item(
         return "??"
     }
 
+    fun deathDate(): Int {
+        return claims[DATE_OF_DEATH]!!.toInt()
+    }
+
     fun hasLifeDates(): Boolean {
-        return claims.containsKey(DOB_PROPERTY) || claims.containsKey(DOD_PROPERTY)
+        return hasDate(DATE_OF_BIRTH) && hasDate(DATE_OF_DEATH)
+    }
+
+    private fun hasDate(claim: String): Boolean {
+        val value = claims[claim]
+        return !(value == null || value == UNKNOWN)
+    }
+
+    fun isHuman(): Boolean {
+        val i = instanceOf()
+        return i == HUMAN
+    }
+
+    fun isFictionalHuman(): Boolean {
+        val i = instanceOf()
+        return i == FICTIONAL_HUMAN
+    }
+
+    fun instanceOf(): String {
+        return claims[INSTANCE_OF] ?: "??"
+    }
+
+    override fun toString(): String {
+        return englishName()
+    }
+
+    fun toDeadPerson(): DeadPerson {
+        return DeadPerson(id, claims[DATE_OF_BIRTH]!!.toInt(), claims[DATE_OF_DEATH]!!.toInt())
     }
 }

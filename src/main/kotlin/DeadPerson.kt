@@ -1,0 +1,1 @@
+class DeadPerson(val id: String, val born: Int, val died: Int)
