@@ -1,7 +1,7 @@
 <component name="ArtifactManager">
   <artifact type="jar" name="WikiParser:jar">
     <output-path>$PROJECT_DIR$/out/artifacts/WikiParser_jar</output-path>
-    <root id="archive" name="WikiParser.jar">
+    <root id="root">
       <element id="module-output" name="WikiParser" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/fasterxml/jackson/core/jackson-core/2.13.3/jackson-core-2.13.3.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$MAVEN_REPOSITORY$/org/jetbrains/kotlin/kotlin-stdlib-jdk8/1.9.0/kotlin-stdlib-jdk8-1.9.0.jar" path-in-jar="/" />

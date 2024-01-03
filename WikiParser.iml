@@ -7,11 +7,14 @@
       <sourceFolder url="file://$MODULE_DIR$/src/main/resources" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/src/test/kotlin" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/src/test/resources" type="java-test-resource" />
+      <excludeFolder url="file://$MODULE_DIR$/out" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="KotlinJavaRuntime" level="project" />
     <orderEntry type="library" name="fasterxml.jackson.core" level="project" />
     <orderEntry type="library" name="fasterxml.jackson.core.databind" level="project" />
+    <orderEntry type="library" name="fasterxml.jackson.module.kotlin" level="project" />
+    <orderEntry type="library" name="apache.commons.compress" level="project" />
   </component>
 </module>

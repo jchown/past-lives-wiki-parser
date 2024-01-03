@@ -47,7 +47,7 @@ class Item(
 
     private fun hasDate(claim: String): Boolean {
         val value = claims[claim]
-        return !(value == null || value == UNKNOWN)
+        return !(value == null || value == UNKNOWN || value == "(no value)")
     }
 
     fun isHuman(): Boolean {

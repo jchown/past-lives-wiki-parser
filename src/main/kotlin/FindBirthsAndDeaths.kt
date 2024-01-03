@@ -8,7 +8,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.zip.GZIPInputStream
 
-object Main {
+object FindBirthsAndDeaths {
 
     var key: String = ""
     var path: String = ""
@@ -20,7 +20,7 @@ object Main {
     @JvmStatic
     fun main(args: Array<String>) {
 
-        val file = File("C:\\Users\\jason\\Downloads\\wikidata-20220103-all.json.gz")
+        val file = File("$baseDir/wikidata-20230906-all.json.gz")
 
         FileInputStream(file).use { inStream ->
 
@@ -74,8 +74,10 @@ object Main {
 
     val objectMapper = ObjectMapper().writerWithDefaultPrettyPrinter()
 
+    val baseDir = System.getenv("DROPBOX") + "\\Work\\Data\\wikidata"
+
     private fun save(items: Map<Int, List<DeadPerson>>) {
-        objectMapper.writeValue(File("items.json"), items)
+        objectMapper.writeValue(File("$baseDir/dead-people.json"), items)
     }
 
     private fun readItem(jParser: JsonParser): Item? {
@@ -310,11 +312,15 @@ object Main {
         val time = value["time"] as String
         val eraAD = (time[0] == '+')
         val ymd = time.substring(1, 11)
-
         val suffix = if (eraAD) "AD" else "BC"
-        val datetime = LocalDate.parse("$ymd $suffix", dateFormat).plusDays(daysOffset.toLong())
 
-        return datetime.toEpochDay().toString()
+        return try {
+            val datetime = LocalDate.parse("$ymd $suffix", dateFormat).plusDays(daysOffset.toLong())
+            datetime.toEpochDay().toString()
+        } catch (e: Exception) {
+            println("Bad date: ${e.message}")
+            null
+        }
     }
 
     private fun asId(obj: Map<String, Any>): String {
