@@ -9,9 +9,7 @@ object RankPeople {
     val baseDir = System.getenv("DROPBOX") + "\\Work\\Data\\wikidata"
 
     class DeadPeople: LinkedHashMap<Int, List<DeadPerson>>()
-    {
-
-    }
+    class SortedBornPeople: LinkedHashMap<Int, List<BornPerson>>()
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -59,5 +57,26 @@ object RankPeople {
         }
 
         println("Loaded ${ranks.size} ranks of wikidata entries")
+
+        val sortedBornPeople = SortedBornPeople()
+
+        for (day in deadPeople.keys) {
+
+            val people = deadPeople[day]!!
+
+            sortedBornPeople[day] = people
+                .sortedByDescending { person -> ranks[person.id] ?: 0.0 }
+                .map { person -> BornPerson(person.id, person.born) }
+                .toList()
+        }
+
+        println("Sorted people")
+
+        val deadPeopleSortedFile = File("$baseDir/dead-people-sorted.json")
+
+        FileOutputStream(deadPeopleSortedFile).use { dpf ->
+
+            mapper.writeValue(dpf, sortedBornPeople)
+        }
     }
 }

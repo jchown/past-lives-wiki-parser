@@ -1,0 +1,1 @@
+class BornPerson(val id: String, val born: Int)
